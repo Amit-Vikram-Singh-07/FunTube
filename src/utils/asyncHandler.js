@@ -2,18 +2,16 @@
 
 const asyncHandler = (fxn) => {
   return (req, res, next) => {
-    Promise.resolve()
-      .then(() => fxn(req, res, next))
-      .catch((error) => {
-        const err = {
-          code: error.code || 500,
-          message: error.message || "Internal Server Error",
-        };
-        res.status(err.code).json({
-          success: false,
-          message: err.message,
-        });
+    Promise.resolve(fxn(req, res, next)).catch((error) => {
+      const err = {
+        code: error.code || 500,
+        message: error.message || "Internal Server Error",
+      };
+      res.status(err.code).json({
+        success: false,
+        message: err.message,
       });
+    });
   };
 };
 
@@ -35,10 +33,5 @@ const asyncHandler = (fxn) => {
 //     }
 //   };
 // };
-
-
-
-
-
 
 export default asyncHandler;
