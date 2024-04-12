@@ -8,6 +8,7 @@ const corsOptions = {
   origin: process.env.CORS_ORIGIN,
   Credential: true,
 };
+
 // Middleware
 app.use(cors(corsOptions));
 app.use(express.json({limit:"20kb"}));
@@ -16,5 +17,12 @@ app.use(express.static("public"));
 app.use(cookieParser());
 
 
+// routes import
+import userRouter  from "./routes/user.route.js";
+
+
+// routes declaration
+app.use("/api/v1/users",userRouter);
+// URL : htttps://localhost:8080//api/v1/users
 
 export default app;

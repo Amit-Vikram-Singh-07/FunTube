@@ -1,5 +1,6 @@
 import multer from "multer";
 
+
 // Define storage configuration for Multer
 const storage = multer.diskStorage({
   // Destination function specifies where files will be stored
@@ -13,6 +14,7 @@ const storage = multer.diskStorage({
     callback(null, `${Date.now()}-${file.originalname}`);
   },
 });
+
 
 // Define the upload middleware using Multer
 const upload = multer({

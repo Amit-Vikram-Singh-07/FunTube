@@ -7,6 +7,7 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
+
 // Function to upload file to Cloudinary from local file path
 const uploadToCloudinary = async (localFilePath) => {
   try {
