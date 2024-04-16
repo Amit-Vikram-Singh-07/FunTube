@@ -11,7 +11,7 @@ const storage = multer.diskStorage({
   // Filename function specifies how files should be named
   filename: (req, file, callback) => {
     // Specify the filename using the current timestamp and original filename -- each file will be unique
-    callback(null, `${file.originalname}`);
+    callback(null, `${file.originalname}`); // for making it unique name ucan add &{Date.now()}
   },
 });
 
