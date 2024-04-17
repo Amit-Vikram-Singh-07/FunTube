@@ -3,6 +3,7 @@ import { User } from "../models/user.model.js";
 import { apiResponse } from "../utils/apiResponse.js";
 import { apiError } from "../utils/apiError.js";
 import uploadToCloudinary from "../utils/cloudinary.js";
+import jwt from "jsonwebtoken";
 
 // Register a new user -> Steps involved
 //Step 1 : Taking name, email from request/frontend
@@ -93,21 +94,26 @@ const registerUser = asyncHandler(async (req, res) => {
     .json(new apiResponse(200, createdUser, "User registered successfully."));
 });
 
+//  Generating the both tokens
 const generateAccessRefreshTokens = async (userId) => {
   try {
-    const user = User.findById(userId);
-    if (!userId) {
+    const user = await User.findById(userId);
+    if (!user) {
       throw new apiError(404, "User does not exist!.");
     }
-    const accessToken = user.generateaccessToken();
+    const accessToken = user.generateAccessToken();
     const refreshToken = user.generateRefreshToken();
-
     user.refreshToken = refreshToken;
-    await user.save({ validBeforeSave: false });
+    await user.save({ validateBeforeSave: false }); // validateBeforeSave -> for avoiding the all fields (required will create problem) input checking
+    // console.log("User : ",user);
 
     return { accessToken, refreshToken };
   } catch (error) {
-    throw new apiError(500, "While generating tokens, something went wrong!. ");
+    // console.log("I am in catch block!.")
+    throw new apiError(
+      500,
+      "While generating tokens, something went wrong!!. "
+    );
   }
 };
 
@@ -125,32 +131,36 @@ const loginUser = asyncHandler(async (req, res) => {
   const { email, username, password } = req.body;
 
   // Step 2: Validation - Check if email and password are provided
-  if ((email == "" && username == "") || password == "") {
+  if ((!email && !username) || !password) {
     throw new apiError(400, "Email or Usernname and Password required!.");
   }
   // Step 3: Check if the user is already logged in (optional)
-
   // Step 4: Check if the user exists in the database
-  const user = await User.findOne($or[({ email }, { username })]);
+  const user = await User.findOne({ $or: [{ email }, { username }] });
   if (!user) {
     throw new apiError(404, "User does not exist!.");
   }
   // Step 5: Compare the provided password with the stored password hash
-  const isPasswordMatched = await user.isPasswordCorrect(password);
+  const isPasswordMatched = await user.isPasswordCorrect(password); // this method can be accessed by each user doc.
   if (!isPasswordMatched) {
-    throw new apiError(400, "Password is incorrect!.");
+    throw new apiError(400, "Password is incorrect! or Invalid credentials.");
   }
   // Step 6: If passwords match, generate a JWT token for authentication
-  const { accessToken, refreshToken } = generateAccessRefreshTokens(user._id);
+  const { accessToken, refreshToken } = await generateAccessRefreshTokens(
+    user._id
+  );
   const loggedInUser = await User.findById(user._id).select(
     "-password -refreshToken"
   );
+  // console.log("Logged in user : ", loggedInUser);
+  // console.log("01 ... I am herre!!!!.....");
 
   // Step 7: Return the JWT token and any additional user data as a response
   const options = {
-    httpOnly: True,
+    httpOnly: true,
     secure: true,
   };
+  // console.log("02 ... I am herre!!!!.....");
   res
     .status(200)
     .cookie("accessToken", accessToken, options)
@@ -159,6 +169,7 @@ const loginUser = asyncHandler(async (req, res) => {
       new apiResponse(
         200,
         {
+          // Why we need to send { refreshToken,accessToken} again in user object -> some user want to save cookie on client side
           user: loggedInUser,
           refreshToken,
           accessToken,
@@ -177,7 +188,7 @@ const loginUser = asyncHandler(async (req, res) => {
 const logoutUser = asyncHandler(async (req, res) => {
   // Step 1: Get userId from request or session
   const userId = req.user._id;
-
+  console.log("**** 01 - logoutUser post!! *****");
   // Step 2: Check if user exists in the database
   await User.findByIdAndUpdate(
     userId,
@@ -186,6 +197,7 @@ const logoutUser = asyncHandler(async (req, res) => {
     },
     { new: true }
   );
+  console.log("***** 02 - logoutUser post!! ***** ");
   // const user = User.findById(userId);
   // if (!user) {
   //   throw new apiError(404, "User does not exist!.");
@@ -196,7 +208,7 @@ const logoutUser = asyncHandler(async (req, res) => {
 
   // Step 4: Send a success response indicating the user has been logged out
   const options = {
-    httpOnly: True,
+    httpOnly: true,
     secure: true,
   };
 
@@ -207,4 +219,71 @@ const logoutUser = asyncHandler(async (req, res) => {
     .json(new apiResponse(200, {}, "User logged out successfully."));
 });
 
-export{ registerUser,loginUser,logoutUser};
+// API End point for refreshing the access and refresh token
+// Steps : 1) Extract the refresh token from the request cookies.
+// Steps : 2) Verify the refresh token using the `jwt.verify` method.
+// Steps : 3) Retrieve the user associated with the refresh token from the database.
+// Steps : 4) Generate a new access token using the `jwt.sign` method.
+// Steps : 5) Send the new access token as a JSON response.
+// Steps : 6) If any error occurs during the process, send a 401 Unauthorized response.
+
+const refreshAccessToken = asyncHandler(async (req, res) => {
+  // Steps : 1) Extract the refresh token from the request cookies.
+  const incomingRefreshToken = req.cookies.refreshToken || req.body.refreshToken;
+  console.log("incomingRefreshToken : ", incomingRefreshToken);
+  if (!incomingRefreshToken) {
+    throw new apiError(
+      401,
+      "Unauthorized request!!, you don't have valid refreshToken."
+    );
+  }
+  try {
+    // Steps : 2) Verify the refresh token using the `jwt.verify` method.
+    const decodedToken = jwt.verify(
+      incomingRefreshToken,
+      process.env.REFRESH_TOKEN_SECRET
+    );
+    console.log("Decoded token :", decodedToken);
+
+    // Steps : 3) Retrieve the user associated with the refresh token from the database.
+    const user = await User.findById(decodedToken?._id);
+    if (!user) {
+      throw new apiError(401, "Invalid refresh token, user does not exist!!");
+    }
+    // Steps : ) Matching the incomingRefreshToken and user saved refreshToken
+    if (incomingRefreshToken !== user.refreshToken) {
+      throw new apiError(401, "Refresh token is expired or used.");
+    }
+    // Steps : 4) Generate a new access token using the `jwt.sign` method.
+    const { newAccessToken, newRefreshToken } =
+      await generateAccessRefreshTokens(decodedToken._id);
+
+    const options = {
+      httpOnly: true,
+      secure: true,
+    };
+    // console.log("02 ... I am herre!!!!.....");
+    // Steps : 5) Send the new access token as a JSON response.
+    res
+      .status(200)
+      .cookie("newAccessToken", newAccessToken, options)
+      .cookie("newRefreshToken", newRefreshToken, options)
+      .json(
+        new apiResponse(
+          200,
+          {
+            newRefreshToken,
+            newAccessToken,
+          },
+          "User accessToken is refreshed successfully."
+        )
+      );
+  } catch (error) {
+    throw new apiError(
+      401,
+      "Unauthorized request, you should have refresh token!!"
+    );
+  }
+});
+
+export { registerUser, loginUser, logoutUser, refreshAccessToken };
