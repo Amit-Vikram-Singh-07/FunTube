@@ -5,6 +5,29 @@ import { apiError } from "../utils/apiError.js";
 import uploadToCloudinary from "../utils/cloudinary.js";
 import jwt from "jsonwebtoken";
 
+//  Generating the both tokens
+const generateAccessRefreshTokens = async (userId) => {
+  try {
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new apiError(404, "User does not exist!.");
+    }
+    const accessToken = user.generateAccessToken();
+    const refreshToken = user.generateRefreshToken();
+    user.refreshToken = refreshToken;
+    await user.save({ validateBeforeSave: false }); // validateBeforeSave -> for avoiding the all fields (required will create problem) input checking
+    // console.log("User : ",user);
+
+    return { accessToken, refreshToken };
+  } catch (error) {
+    // console.log("I am in catch block!.")
+    throw new apiError(
+      500,
+      "While generating tokens, something went wrong!!. "
+    );
+  }
+};
+
 // Register a new user -> Steps involved
 //Step 1 : Taking name, email from request/frontend
 //Step 2 : Validation - like non empty field
@@ -15,7 +38,7 @@ import jwt from "jsonwebtoken";
 //Step 7 : return response
 
 const registerUser = asyncHandler(async (req, res) => {
-  console.log("01 - I am here now, just at post-01!!");
+  // console.log("01 - I am here now, just at post-01!!");
   // Step 1: Extracting user data from request
   const { username, email, fullName, password, avatar, coverImg } = req.body;
   // console.log("Email :",email);
@@ -53,8 +76,7 @@ const registerUser = asyncHandler(async (req, res) => {
   if (
     req.files &&
     req.files.coverImg &&
-    req.files.coverImg[0] &&
-    req.files.coverImg[0].path
+    req.files.coverImg[0] & req.files.coverImg[0].path
   ) {
     coverImgLocalpath = req.files.coverImg[0].path;
   }
@@ -67,8 +89,8 @@ const registerUser = asyncHandler(async (req, res) => {
   if (!avatarCloudResponse)
     throw new apiError(500, "Avatar field is required to cloudinary.");
 
-  console.log("avatarCloudResponse: ", avatarCloudResponse);
-  console.log("coverImgCloudResponse: ", coverImgCloudResponse);
+  // console.log("avatarCloudResponse: ", avatarCloudResponse);
+  // console.log("coverImgCloudResponse: ", coverImgCloudResponse);
 
   // Step 5: Creating a new user instance and checking created or not
   const newUser = await User.create({
@@ -87,35 +109,12 @@ const registerUser = asyncHandler(async (req, res) => {
     throw new apiError(500, "Failed to create user.");
   }
 
-  console.log("02 - I am here now, just at post-02!!");
+  // console.log("02 - I am here now, just at post-02!!");
   // Step 7: Return success response
   res
     .status(201)
     .json(new apiResponse(200, createdUser, "User registered successfully."));
 });
-
-//  Generating the both tokens
-const generateAccessRefreshTokens = async (userId) => {
-  try {
-    const user = await User.findById(userId);
-    if (!user) {
-      throw new apiError(404, "User does not exist!.");
-    }
-    const accessToken = user.generateAccessToken();
-    const refreshToken = user.generateRefreshToken();
-    user.refreshToken = refreshToken;
-    await user.save({ validateBeforeSave: false }); // validateBeforeSave -> for avoiding the all fields (required will create problem) input checking
-    // console.log("User : ",user);
-
-    return { accessToken, refreshToken };
-  } catch (error) {
-    // console.log("I am in catch block!.")
-    throw new apiError(
-      500,
-      "While generating tokens, something went wrong!!. "
-    );
-  }
-};
 
 // Login a user -> Steps involved
 // Step 1: Destructuring the { email, password } from req.body
@@ -229,7 +228,8 @@ const logoutUser = asyncHandler(async (req, res) => {
 
 const refreshAccessToken = asyncHandler(async (req, res) => {
   // Steps : 1) Extract the refresh token from the request cookies.
-  const incomingRefreshToken = req.cookies.refreshToken || req.body.refreshToken;
+  const incomingRefreshToken =
+    req.cookies.refreshToken || req.body.refreshToken;
   console.log("incomingRefreshToken : ", incomingRefreshToken);
   if (!incomingRefreshToken) {
     throw new apiError(
@@ -266,8 +266,8 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
     // Steps : 5) Send the new access token as a JSON response.
     res
       .status(200)
-      .cookie("newAccessToken", newAccessToken, options)
-      .cookie("newRefreshToken", newRefreshToken, options)
+      .cookie("accessToken", newAccessToken, options)
+      .cookie("refreshToken", newRefreshToken, options)
       .json(
         new apiResponse(
           200,
@@ -286,4 +286,223 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
   }
 });
 
-export { registerUser, loginUser, logoutUser, refreshAccessToken };
+// Steps involved in changing current password
+// Steps : 1) Destructure {email,password,newPassword} from req.body
+// Steps : 2) Validation check on {email,password,newPassword}
+// Steps : 3) Check user exist or not then access that user
+// Steps : 4) Match password with encrypted saved one, if matched then update  with newPassword
+// Steps : 5) Send one response
+
+// Change Password
+const changePassword = asyncHandler(async (req, res) => {
+  // Step 1: Destructure {email, password, newPassword} from req.body
+  const { email, password, newPassword } = req.body;
+
+  // Step 2: Validation
+  if (!email || !password || !newPassword) {
+    throw new apiError(
+      400,
+      "Email, current password, and new password are required."
+    );
+  }
+
+  // Step 3: Check if the user exists and retrieve user data
+  const user = await User.findOne({ email });
+  if (!user) {
+    throw new apiError(404, "User not found.");
+  }
+
+  // Step 4: Match current password with the saved one, and update with newPassword if matched
+  const isPasswordMatched = await user.isPasswordCorrect(password);
+  if (!isPasswordMatched) {
+    throw new apiError(400, "Invalid current password.");
+  }
+  user.password = newPassword;
+
+  // Step 5: Save the updated user data
+  await user.save({ validateBeforeSave: false });
+
+  // Step 6: Send the response
+  res
+    .status(200)
+    .json(new apiResponse(200, { user }, "Password changed successfully."));
+});
+
+// Steps involved in accessing current user
+const getCurrentUser = asyncHandler(async (req, res) => {
+  const currUser = req.user;
+  // console.log("Current user : ", currUser);
+  res
+    .status(200)
+    .json(
+      new apiResponse(200, { currUser }, "Current user fetched successfully..")
+    );
+});
+
+// Steps involved updating the account details
+const updateAccountDetails = asyncHandler(async (req, res) => {
+  const { fullName, email } = req.body;
+  if (!email || !fullName) {
+    throw new apiError(400, "All fields are required!.");
+  }
+  const user = await User.findByIdAndUpdate(
+    req.user?._id,
+    {
+      $set: { fullName: fullName, email: email },
+    },
+    { new: true } // for returning the updated user
+  ).select("-password -refreshToken");
+
+  res
+    .status(200)
+    .json(new apiResponse(200, { user }, "User account updated successfully."));
+});
+
+// Steps involved in user avatar updatation --> two middlewares in route verifyJWT,multer
+const updateUserAvatar = asyncHandler(async (req, res) => {
+  const avatarLocalpath = req.file?.path; // bcz here we accepting just one file not files
+  if (!avatarLocalpath) {
+    throw new apiError(
+      400,
+      "New avatar file is required to upload on local server."
+    );
+  }
+  const avatarCloudResponse = await uploadToCloudinary(avatarLocalpath);
+  if (!avatarCloudResponse) {
+    throw new apiError(
+      500,
+      "New avatar file is required to upload on cloudinary."
+    );
+  }
+  console.log("avatarCloudResponse: ", avatarCloudResponse);
+
+  const user = await User.findByIdAndUpdate(
+    req.user?._id,
+    {
+      $set: { avatar: avatarCloudResponse.url },
+    },
+    { new: true } // for returning the updated user
+  ).select("-password -refreshToken");
+
+  res
+    .status(200)
+    .json(new apiResponse(200, user, "User's avatar is updated successfully."));
+});
+
+// Steps involved in user avatar updatation --> two middlewares in route verifyJWT,multer
+const updateUserCoverImg = asyncHandler(async (req, res) => {
+  const coverImgLocalpath = req.file?.path; // bcz here we are accepting just one file not files
+  if (!coverImgLocalpath) {
+    throw new apiError(
+      400,
+      "New cover image is required to upload on local server."
+    );
+  }
+  const coverImgCloudResponse = await uploadToCloudinary(coverImgLocalpath);
+  if (!coverImgCloudResponse) {
+    throw new apiError(
+      500,
+      "New cover image is required to upload on cloudinary."
+    );
+  }
+  console.log("coverImgCloudResponse: ", coverImgCloudResponse);
+
+  const user = await User.findByIdAndUpdate(
+    req.user?._id,
+    {
+      $set: { coverImg: coverImgCloudResponse.url },
+    },
+    { new: true } // for returning the updated user
+  ).select("-password -refreshToken");
+
+  res
+    .status(200)
+    .json(
+      new apiResponse(200, user, "User's cover image is updated successfully.")
+    );
+});
+
+
+const getUserChannelProfile = asyncHandler(async (req, res) => {
+  const { username } = req.params;
+
+  if (!username?.trim()) {
+    throw new apiError(400, "username is missing");
+  }
+
+  const channel = await User.aggregate([
+    {
+      $match: {
+        username: username?.toLowerCase(),
+      },
+    },
+    {
+      $lookup: {
+        from: "subscriptions", // from which doc's you want to search
+        localField: "_id", // local field
+        foreignField: "channel", // foreign field channel will give subscribers
+        as: "subscribers",
+      },
+    },
+    {
+      $lookup: {
+        from: "subscriptions",
+        localField: "_id",
+        foreignField: "subscriber",
+        as: "subscribedTo", // to how many channel this user has benn subscribed
+      },
+    },
+    {
+      $addFields: {
+        subscribersCount: {
+          $size: "$subscribers",
+        },
+        channelsSubscribedToCount: {
+          $size: "$subscribedTo",
+        },
+        isSubscribed: {
+          $cond: {
+            if: { $in: [req.user?._id, "$subscribers.subscriber"] },
+            then: true,
+            else: false,
+          },
+        },
+      },
+    },
+    {
+      $project: {
+        username: 1,
+        fullName: 1,
+        email: 1,
+        avatar: 1,
+        coverImage: 1,
+        subscribersCount: 1,
+        channelsSubscribedToCount: 1,
+        isSubscribed: 1,
+      },
+    },
+  ]);
+   console.log("Channel return by aggregte : " ,channel);
+  if (!channel?.length) {
+    throw new apiError(404, "Channel does not exists.");
+  }
+
+  return res
+    .status(200)
+    .json(
+      new apiResponse(200, channel[0], "User's channel fetched successfully.")
+    );
+});
+
+export {
+  registerUser,
+  loginUser,
+  logoutUser,
+  refreshAccessToken,
+  changePassword,
+  getCurrentUser,
+  updateAccountDetails,
+  updateUserAvatar,
+  updateUserCoverImg,
+  getUserChannelProfile
+};
