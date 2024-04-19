@@ -422,7 +422,6 @@ const updateUserCoverImg = asyncHandler(async (req, res) => {
     );
 });
 
-
 const getUserChannelProfile = asyncHandler(async (req, res) => {
   const { username } = req.params;
 
@@ -482,7 +481,7 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
       },
     },
   ]);
-   console.log("Channel return by aggregte : " ,channel);
+  console.log("Channel return by aggregte : ", channel);
   if (!channel?.length) {
     throw new apiError(404, "Channel does not exists.");
   }
@@ -492,6 +491,59 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
     .json(
       new apiResponse(200, channel[0], "User's channel fetched successfully.")
     );
+});
+
+const getWatchHistory = asyncHandler(async (req, res) => {
+  // req.user._id = return string  -  dc5-0559-4fa6-996d-c2588025005d
+  // Aggregation pipeline code goes directly to mongoDB, not through mongoose
+  const user = await User.aggregate([
+    {
+      $match: {
+        _id: new mongoose.Types.ObjectId(req.user._id), // convert string to objectId -- ObjectId('dc5-0559-4fa6-996d-c2588025005d')
+      },
+    },
+    {
+      $lookup: {
+        from: "videos",
+        localField: "watchHistory",
+        foreignField: "_id",
+        as: "watchHistory",
+        pipeline: [
+          {
+            $lookup: {
+              from: "users",
+              localField: "owner",
+              foreignField: "_id",
+              as: "owner",
+              // try this pipeline, keeping outside from owner field
+              pipeline: [
+                {
+                  $project: {
+                    fullName: 1,
+                    username: 1,
+                    avatar: 1,
+                  },
+                },
+              ],
+            },
+          },
+          { // just improving the owner array for easy handling in frontend 
+            $addFields: {
+              owner: { // overriding owner as owner and extracting first valur from old owner
+                $first: "$owner",
+              },
+            },
+          },
+        ],
+      },
+    },
+  ]);
+ 
+  console.log("User :",user);
+  console.log("User[0] :",user[0]);
+  return res
+    .status(200)
+    .json(new apiResponse( 200, user[0].watchHistory, "Watch history fetched successfully."));
 });
 
 export {
@@ -504,5 +556,6 @@ export {
   updateAccountDetails,
   updateUserAvatar,
   updateUserCoverImg,
-  getUserChannelProfile
+  getUserChannelProfile,
+  getWatchHistory
 };
