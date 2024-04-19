@@ -187,16 +187,16 @@ const loginUser = asyncHandler(async (req, res) => {
 const logoutUser = asyncHandler(async (req, res) => {
   // Step 1: Get userId from request or session
   const userId = req.user._id;
-  console.log("**** 01 - logoutUser post!! *****");
+  // console.log("**** 01 - logoutUser post!! *****");
   // Step 2: Check if user exists in the database
   await User.findByIdAndUpdate(
     userId,
     {
-      $set: { refreshToken: undefined },
+      $set: { refreshToken: undefined },  // Yo may need some changes here - >(use $unset)
     },
     { new: true }
   );
-  console.log("***** 02 - logoutUser post!! ***** ");
+  // console.log("***** 02 - logoutUser post!! ***** ");
   // const user = User.findById(userId);
   // if (!user) {
   //   throw new apiError(404, "User does not exist!.");
