@@ -1,8 +1,12 @@
+import mongoose from "mongoose";
 import asyncHandler from "../utils/asyncHandler.js";
 import { User } from "../models/user.model.js";
 import { apiResponse } from "../utils/apiResponse.js";
 import { apiError } from "../utils/apiError.js";
-import uploadToCloudinary from "../utils/cloudinary.js";
+import {
+  uploadToCloudinary,
+  deleteFromCloudinary,
+} from "../utils/cloudinary.js";
 import jwt from "jsonwebtoken";
 
 //  Generating the both tokens
@@ -69,14 +73,15 @@ const registerUser = asyncHandler(async (req, res) => {
   }
 
   // Step 4: Check for coverImgLocalpath and avatarLocalpath, then upload to Cloudinary
-  console.log("Files (req.files) to be uploaded : ", req.files);
+  // console.log("Files (req.files) to be uploaded : ", req.files);
   const avatarLocalpath = req.files?.avatar[0]?.path;
   // const coverImgLocalpath = req.files?.coverImg[0]?.path;
   let coverImgLocalpath;
   if (
     req.files &&
     req.files.coverImg &&
-    req.files.coverImg[0] & req.files.coverImg[0].path
+    req.files.coverImg[0] &&
+    req.files.coverImg[0].path
   ) {
     coverImgLocalpath = req.files.coverImg[0].path;
   }
@@ -192,7 +197,7 @@ const logoutUser = asyncHandler(async (req, res) => {
   await User.findByIdAndUpdate(
     userId,
     {
-      $set: { refreshToken: undefined },  // Yo may need some changes here - >(use $unset)
+      $set: { refreshToken: undefined }, // Yo may need some changes here - >(use $unset)
     },
     { new: true }
   );
@@ -360,6 +365,10 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
 
 // Steps involved in user avatar updatation --> two middlewares in route verifyJWT,multer
 const updateUserAvatar = asyncHandler(async (req, res) => {
+  //  Deletion of previous avatar file
+  const prevAvatarCloudUrl = req.user?.avatar;
+  await deleteFromCloudinary(prevAvatarCloudUrl);
+
   const avatarLocalpath = req.file?.path; // bcz here we accepting just one file not files
   if (!avatarLocalpath) {
     throw new apiError(
@@ -374,7 +383,7 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
       "New avatar file is required to upload on cloudinary."
     );
   }
-  console.log("avatarCloudResponse: ", avatarCloudResponse);
+  // console.log("avatarCloudResponse: ", avatarCloudResponse);
 
   const user = await User.findByIdAndUpdate(
     req.user?._id,
@@ -391,6 +400,10 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
 
 // Steps involved in user avatar updatation --> two middlewares in route verifyJWT,multer
 const updateUserCoverImg = asyncHandler(async (req, res) => {
+  //  Deletion of previous coverImg file
+  const prevCoverImgCloudUrl = req.user?.coverImg;
+  await deleteFromCloudinary(prevCoverImgCloudUrl);
+
   const coverImgLocalpath = req.file?.path; // bcz here we are accepting just one file not files
   if (!coverImgLocalpath) {
     throw new apiError(
@@ -527,9 +540,11 @@ const getWatchHistory = asyncHandler(async (req, res) => {
               ],
             },
           },
-          { // just improving the owner array for easy handling in frontend 
+          {
+            // just improving the owner array for easy handling in frontend
             $addFields: {
-              owner: { // overriding owner as owner and extracting first valur from old owner
+              owner: {
+                // overriding owner as owner and extracting first valur from old owner
                 $first: "$owner",
               },
             },
@@ -538,12 +553,18 @@ const getWatchHistory = asyncHandler(async (req, res) => {
       },
     },
   ]);
- 
-  console.log("User :",user);
-  console.log("User[0] :",user[0]);
+
+  console.log("User :", user);
+  console.log("User[0] :", user[0]);
   return res
     .status(200)
-    .json(new apiResponse( 200, user[0].watchHistory, "Watch history fetched successfully."));
+    .json(
+      new apiResponse(
+        200,
+        user[0].watchHistory,
+        "Watch history fetched successfully."
+      )
+    );
 });
 
 export {
@@ -557,5 +578,5 @@ export {
   updateUserAvatar,
   updateUserCoverImg,
   getUserChannelProfile,
-  getWatchHistory
+  getWatchHistory,
 };

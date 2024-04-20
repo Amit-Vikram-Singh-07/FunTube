@@ -33,7 +33,7 @@ userRouter.route("/logout").post(verifyJWT, logoutUser);
 userRouter.route("/refresh-token").post(refreshAccessToken);
 userRouter.route("/change-password").post(verifyJWT, changePassword);
 userRouter.route("/current-user").post(verifyJWT, getCurrentUser);
-userRouter.route("/update-account").patch(verifyJWT, updateAccountDetails);
+userRouter.route("/update-account-details").patch(verifyJWT, updateAccountDetails);
 userRouter.route("/change-avatar").patch(
     verifyJWT,
     upload.single("avatar"),
