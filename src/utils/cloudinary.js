@@ -37,14 +37,14 @@ const uploadToCloudinary = async (localFilePath) => {
 
 // Function to delete an image from Cloudinary
 const deleteFromCloudinary = async (imageUrl) => {
-  console.log("Image url :",imageUrl);
+  // console.log("Image url :",imageUrl);
   try {
     // Extract public ID from the image URL (assuming Cloudinary public ID is part of the URL)
     const publicId = imageUrl.split("/").pop().split(".")[0];
 
     // Delete the image from Cloudinary
     const deletionResult = await cloudinary.uploader.destroy(publicId);
-    console.log("deletionResult :" ,deletionResult);
+    // console.log("deletionResult :" ,deletionResult);
 
     if (deletionResult.result === "ok") {
       console.log(

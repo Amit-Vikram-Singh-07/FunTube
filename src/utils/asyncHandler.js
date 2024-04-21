@@ -34,4 +34,4 @@ const asyncHandler = (fxn) => {
 //   };
 // };
 
-export default asyncHandler;
+export {asyncHandler};
