@@ -45,7 +45,7 @@ const registerUser = asyncHandler(async (req, res) => {
   // console.log("01 - I am here now, just at post-01!!");
   // Step 1: Extracting user data from request
   const { username, email, fullName, password, avatar, coverImg } = req.body;
-  // console.log("Email :",email);
+  // console.log("Email :",email); 
   // console.log(req.body);
 
   // Step 2: Validation - Checking for non-empty fields

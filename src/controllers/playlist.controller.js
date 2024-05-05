@@ -179,7 +179,6 @@ const deletePlaylist = asyncHandler(async (req, res) => {
 });
 
 const updatePlaylist = asyncHandler(async (req, res) => {
-
     //TODO: update playlist
     try {
         const { playlistId } = req.params;
